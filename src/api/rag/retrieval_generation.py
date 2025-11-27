@@ -10,6 +10,13 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import Filter, FieldCondition, MatchValue
 from qdrant_client.models import VectorParams, Distance, PayloadSchemaType, PointStruct, SparseVectorParams, Document, Prefetch, FusionQuery
 
+from src.api.rag.utils.prompt_management import prompt_template_config
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 openai = OpenAI()
 
 
@@ -113,30 +120,13 @@ def process_context(context):
 )
 def build_prompt(preprocessed_context, question):
 
-    prompt = f"""You are a shopping assistant that can answer questions about the products in stock.
+    template = prompt_template_config("src/api/rag/prompts/retrieval_generation.yaml", "retrieval_generation")
+    rendered_prompt = template.render(preprocessed_context=preprocessed_context, question=question)
 
-You will be given a question and a list of context.
 
-Instructtions:
-- You need to answer the question based on the provided context only.
-- Never use word context and refer to it as the available products.
-- As an output you need to provide:
+    # print(rendered_prompt)
 
-* The answer to the question based on the provided context.
-* The list of the IDs of the chunks that were used to answer the question. Only return the ones that are used in the answer.
-* Short description (1-2 sentences) of the item based on the description provided in the context.
-
-- The short description should have the name of the item.
-- The answer to the question should contain detailed information about the product and returned with detailed specification in bullet points.
-
-Context:
-{preprocessed_context}
-
-Question:
-{question}
-"""
-
-    return prompt
+    return rendered_prompt
 
 
 @traceable(
@@ -196,6 +186,11 @@ def rag_pipeline_wrapper(question, top_k=5):
     qdrant_client = QdrantClient(url="http://qdrant:6333")
 
     result = rag_pipeline(question, qdrant_client, top_k)
+
+
+    # print("rag_pipeline returned %d references: %s",
+    # len(result.get("references", [])),
+    # [item.id for item in result.get("references", [])])
 
     used_context = []
     dummy_vector = np.zeros(1536).tolist()
